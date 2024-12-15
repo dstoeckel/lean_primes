@@ -1,0 +1,580 @@
+-- This module serves as the root of the `Primes` library.
+-- Import modules here that should be built as part of the library.
+import «Primes».Basic
+
+import Init.Classical
+
+import Init.Data.Nat
+
+import Init.WF
+
+import Init.Data.List
+
+-- def Divides (n: Nat) (m: Nat) := ∃ k, n = m * k
+
+-- infix:55 " ∣ " => Divides
+
+theorem lt_of_divides {n m k: Nat} (h₁: n = m * k) (h₂: m ≥ 2) (h₃: k > 0): k < n := by
+  rw [h₁]
+  calc
+    k < k + k := by rw ( config := {occs := .pos [1] }) [← Nat.zero_add k]; apply Nat.add_lt_add_right; assumption
+    _ = 2*k := by rw [Nat.succ_mul]; simp
+    _ ≤ m*k := by apply Nat.mul_le_mul_right; assumption
+
+-- theorem non_zero_of_div_non_zero {n m: Nat} (h₁: n > 0) (h₂: n ∣ m): m > 0 := by
+--  cases h₂ with
+--  | intro k hk =>
+--    rw [hk] at h₁
+--    match m with
+--    | 0 => rw [Nat.zero_mul] at h₁; contradiction
+--    | (m + 1) => rw [GT.gt]; exact Nat.zero_lt_succ m
+
+theorem le_of_dvd {n m: Nat} (h: n ∣ m) (h₀: m > 0): n ≤ m := by
+  cases h with
+  | intro k hk =>
+    cases k with
+    | zero => omega
+    | succ l => rw [hk, Nat.mul_add]; simp;
+
+theorem eq_one_of_mul (n m: Nat) (h: n * m = 1): n = 1 ∧ m = 1 := by
+  match n, m with
+  | 0, m => rw [Nat.zero_mul] at h; contradiction
+  | n, 0 => contradiction
+  | 1, 1 => constructor <;> rfl
+  | n + 2, m + 2 =>
+    rw [Nat.add_mul, Nat.mul_add, Nat.mul_add, ← Nat.add_assoc] at h
+    simp at h
+
+theorem eq_div (n m: Nat) (h: 0 < n): n ∣ m ∧ m ∣ n ↔ m = n := by
+  constructor
+  . intro ⟨hn, hm⟩
+    . cases hn with
+      | intro l hl =>
+        cases hm with
+        | intro k hk =>
+          -- rw [←Nat.mul_one n, hk, Nat.mul_assoc] at hl;
+          rw [←Nat.mul_one n, hl, Nat.mul_assoc, Nat.mul_comm l] at hk
+          have h': k*l = 1 := by exact Nat.eq_of_mul_eq_mul_left h (Eq.symm hk)
+          have hl' := eq_one_of_mul k l h'
+          rw [hl'.right, Nat.mul_one] at hl
+          assumption
+
+  . intro hnm; rw [hnm]; constructor <;> exact Nat.dvd_refl n
+
+theorem div_mul (n m k: Nat) (h: m * k ∣ n): k ∣ n ∧ m ∣ n := by
+  cases h with
+  | intro l hl =>
+    constructor
+    . exists m * l; rw [← Nat.mul_assoc, Nat.mul_comm k m]; assumption
+    . exists k * l; rw [← Nat.mul_assoc]; assumption
+
+theorem mul_extend (n m k: Nat) (h: m ∣ n): m ∣ k * n := by
+  cases h with
+  | intro l hl =>
+    exists (k * l)
+    rw [Nat.mul_comm m, Nat.mul_assoc, Nat.mul_comm l, hl]
+
+theorem extend_mul (n m k: Nat) (h: m ∣ n): m ∣ n * k := by
+  rw [Nat.mul_comm]; exact mul_extend n m k h
+
+def IsPrime (n: Nat) := n ≥ 2 ∧ ∀ m, m ≥ 2 ∧ m ≠ n → ¬ m ∣ n
+
+def IsOdd (n: Nat) := ∃k, n = 2*k + 1
+def IsEven (n: Nat) := ∃k, n = 2*k
+
+def sum (t: List Nat) := List.foldl (· + ·) 0 t
+def prod: List Nat → Nat
+  | [] => 1
+  | t::ts => t * prod ts
+
+theorem forall_empty {α : Type} (p: α → Prop) : ∀x, x ∈ [] → p x := by
+  intro x hx
+  contradiction
+
+@[simp]
+theorem one_of_prod_nil : prod [] = 1 := rfl
+
+@[simp]
+theorem self_of_prod_singleton : prod [a] = a := by
+  unfold prod
+  unfold prod
+  rw [Nat.mul_one]
+
+theorem mul_head_of_prod_cons : prod (a :: as) = a * prod as := rfl
+
+theorem dvd_mul_left_or_right {n m l: Nat} (h: n ∣ m ∨ n ∣ l): n ∣ m * l := by
+  cases h with
+  | inl hm => cases hm with
+    | intro c hc =>
+      rw [hc]
+      exists (c * l)
+      rw [Nat.mul_assoc]
+  | inr hl => cases hl with
+    | intro c hc =>
+      rw [hc]
+      exists (c * m)
+      rw [Nat.mul_comm, Nat.mul_assoc]
+
+theorem de_morgan_not_and (p q: Prop): ¬(p ∧ q) ↔ ¬p ∨ ¬q := by
+  constructor
+  . intro h
+    cases Classical.em p with
+    | inl hp => cases Classical.em q with
+      | inl hq =>
+        have h': p ∧ q := ⟨hp, hq⟩
+        contradiction
+      | inr hnq => exact Or.inr hnq
+    | inr hnp => exact Or.inl hnp
+  . intro h hn
+    cases h with
+    | inl hp => exact hp hn.left
+    | inr hq => exact hq hn.right
+
+theorem de_morgan_not_or {p q: Prop}: ¬(p ∨ q) ↔ ¬p ∧ ¬q := by
+  constructor
+  . intro hpq
+    constructor
+    . intro hp
+      exact hpq (Or.inl hp)
+    . intro hq
+      exact hpq (Or.inr hq)
+  . intro ⟨hnp, hnq⟩ hpq
+    cases hpq with
+    | inl hp => exact hnp hp
+    | inr hq => exact hnq hq
+
+theorem mul_head_of_prod_dvd {a: Nat} {as: List Nat} (h: a ∈ as): a ∣ prod as := by
+  induction as with
+  | nil => exfalso; exact (List.not_mem_nil a h)
+  | cons x xs ih =>
+    rw [mul_head_of_prod_cons]
+    apply dvd_mul_left_or_right
+    cases h with
+    | head a => exact Or.inl (Nat.dvd_refl a)
+    | tail a ib => exact Or.inr (ih (h:=ib))
+
+theorem prime_not_dvd {a: Nat} {as: List Nat} (ha: a ≥ 2) (has: ∀x,x∈as → IsPrime x) (hnin: a ∉ as): ∀x,x∈as → ¬(a ∣ x) := by
+  intros x hx hdvd
+  have ⟨hl, hr⟩ := (has x hx)
+  have bla := hr a ⟨ha, by apply Classical.byContradiction; simp; intro heq; rw [heq] at hnin; contradiction⟩
+  exact bla hdvd
+
+theorem prod_of_gt_zero_gt_zero {s: List Nat} (h: ∀x, x ∈ s → 0 < x): 0 < prod s := by
+  induction s with
+  | nil => rw [one_of_prod_nil]; exact Nat.zero_lt_one
+  | cons a as ih =>
+      rw [mul_head_of_prod_cons]
+      have ⟨hl, hr⟩ := (List.forall_mem_cons.mp h)
+      exact Nat.mul_pos hl (ih hr)
+
+theorem zero_is_not_prime : ¬IsPrime 0 := by
+  intro ⟨hl, _⟩
+  contradiction
+
+theorem one_is_not_prime : ¬IsPrime 1 := by
+  intro ⟨hl, _⟩
+  contradiction
+
+
+theorem two_is_prime : IsPrime 2 := by
+  constructor
+  . exact Nat.le_refl 2
+  . intro m hm hdvd
+    have bla := Nat.le_of_dvd (by omega) hdvd
+    omega
+
+theorem three_is_prime : IsPrime 3 := by
+  constructor
+  . apply Nat.le_of_lt; exact Nat.lt_succ_self 2
+  . intro m hm hdiv
+    --have hm': m = 2 :=
+    --  Nat.le_antisymm (Nat.le_of_lt_succ hm.right) (hm.left)
+    cases hdiv with
+    | intro k hk =>
+      -- rw [hm'] at hk
+      match k with
+      | 0 => contradiction
+      | 1 => rw [Nat.mul_one] at hk; exact hm.right (Eq.symm hk)
+      | n + 2 => rw [Nat.mul_add] at hk; omega;
+
+theorem mul_dvd {n m k: Nat} (h: n = m * k): m ∣ n ∧ k ∣ n := by
+  constructor
+  . exists k
+  . exists m; rw [Nat.mul_comm]; assumption;
+
+theorem even_not_prime (p: Nat) (hp: IsEven p) (h2: p > 2): ¬IsPrime p := by
+  intro h
+  cases hp with
+  | intro k hk =>
+    unfold IsPrime at h
+    have hd: 2 ∣ p := by exact (mul_dvd hk).left
+    have hnd: ¬ 2 ∣ p := by exact ((h.right 2) ⟨Nat.le_refl 2, by omega⟩)
+    contradiction
+
+theorem not_for_all {α: Type} (p: α -> Prop): (¬∀x, p x) ↔ ∃x, ¬p x := by
+  constructor
+  . intro h₁
+    exact Classical.byContradiction (by
+      intro h₂
+      apply h₁
+      intro x
+      cases Classical.em (p x) with
+      | inl hpx => exact hpx
+      | inr hnpx =>
+        have h := h₂ ⟨x, hnpx⟩
+        contradiction
+    )
+  . intro h₁ h₂
+    cases h₁ with
+    | intro x hx => exact hx (h₂ x)
+
+-- p -> q
+--    q  ¬q
+--  p ⊤  ⊥
+-- ¬p ⊤  ⊤
+--
+-- ¬(¬p ∨ q) -> p ∧ ¬q
+
+theorem double_not_elim {p: Prop}: ¬¬p ↔ p := by
+  constructor
+  . intro hnnp
+    cases Classical.em p with
+    | inl hp => assumption
+    | inr hnp => contradiction
+  . intro hp hnnp
+    contradiction
+
+theorem imp (p q: Prop): (p → q) ↔ ¬ p ∨ q := by
+  constructor
+  . intro h
+    cases Classical.em p with
+    | inl hp => exact Or.inr (h hp)
+    | inr hnp => exact Or.inl hnp
+  . intro h hp
+    cases h with
+    | inl hnp => contradiction
+    | inr hq => assumption
+
+theorem imp_neg {p q: Prop}: ¬(p → q) ↔ p ∧ ¬q := by
+  constructor
+  . rw [imp p q, de_morgan_not_or]
+    intro ⟨hnnp, hnq⟩
+    constructor
+    . exact double_not_elim.mp hnnp
+    . assumption
+  . intro ⟨hp, hnq⟩ hnp
+    exact hnq (hnp hp)
+
+theorem gt_zero_of_prime {n: Nat} (h: IsPrime n): n > 0 := by
+  unfold IsPrime at h
+  omega
+
+theorem divider_if_not_prime {n: Nat} (hn: n ≥ 2) (h: ¬IsPrime n): ∃k, k ≥ 2 ∧ k < n ∧ k ∣ n := by
+  unfold IsPrime at h
+  rw [de_morgan_not_and, not_for_all] at h
+  cases h with
+  | inl hl => contradiction
+  | inr hr => cases hr with
+    | intro k hk =>
+      rw [imp_neg] at hk
+      exists k
+      rw [double_not_elim, and_assoc] at hk
+      have ⟨hgt, hkn, hdvd⟩ := hk
+      cases Nat.eq_or_lt_of_le (Nat.le_of_dvd (by omega) hdvd) with
+      | inl heq' => exfalso; exact hkn heq'
+      | inr hlt' => exact ⟨hgt, hlt', hdvd⟩
+
+theorem exists_prime_factor {n: Nat} (hn: n ≥ 2): ∃p, IsPrime p ∧ p ∣ n := by
+  induction n using Nat.strongRecOn with
+  | ind n hi => cases Classical.em (IsPrime n) with
+    | inl h => exists n; exact ⟨h, Nat.dvd_refl n⟩
+    | inr h =>
+      cases divider_if_not_prime hn h with
+      | intro k hk => cases hi k hk.right.left hk.left with
+        | intro p hp =>
+          exists p
+          exact ⟨hp.left, Nat.dvd_trans hp.right hk.right.right⟩
+
+-- theorem exists_prime_factor {n: Nat} (hn: n ≥ 2): ∃p, IsPrime p → n ∣ p := by
+--   cases Classical.em (IsPrime n) with
+--   | inl h =>
+--     exists n
+--     intro h'
+--     exact div_self n
+--   | inr h =>
+--     cases divider_if_not_prime hn h with
+--     | intro p hp => induction p using Nat.strongInductionOn with
+--       | ind i hi =>
+
+theorem element_singleton {α: Type} (x : α) (a : α) : (x ∈ [a] → x = a) := by
+  intro h
+  cases h with
+  | head => rfl
+  | tail a has => contradiction
+
+theorem finset_extensionality {α: Type} (p: α → Prop) (a : α) (h₁: p a) (as : List α) (h₂: ∀x, x ∈ as → p x) : ∀x, x ∈ a::as → p x := by
+  intro x hx
+  cases hx with
+  | head => exact h₁
+  | tail a has => exact h₂ x has
+
+def PrimeDecomposition (n: Nat) (s: List Nat) :=
+  (∀x, x ∈ s → IsPrime x) ∧ n = prod s
+
+theorem not_prime_dvd (n: Nat) (h: ¬IsPrime n) (hn: n ≥ 2): ∃ p, p ∣ n := by
+  unfold IsPrime at h
+  rw [not_and, Classical.not_forall] at h
+  simp only [not_imp, Decidable.not_not] at h
+  have h' := h hn
+  cases h' with
+  | intro p hp =>
+    exists p
+    exact hp.right
+
+theorem prime_decomposition (n : Nat) (hn: 0 < n): ∃ s, PrimeDecomposition n s := by
+  induction n using Nat.strongRecOn with
+  | ind n hi => match n with
+    | 0 => contradiction
+    | 1 =>
+      exists []
+      constructor
+      . exact forall_empty IsPrime
+      . apply Eq.symm; exact one_of_prod_nil
+    | n + 2 =>
+      have hn': 2 ≤ n + 2 := Nat.le_add_left 2 n
+      cases exists_prime_factor hn' with
+      | intro p hp =>
+        have hpg: p ≥ 2 := hp.left.left
+        cases hp.right with
+        | intro k hk =>
+          have hkgt: k > 0 := by
+            rw [hk] at hn
+            match k with
+            | 0 => simp at hn
+            | i+1 => apply Nat.zero_lt_succ;
+          have bla: k < n + 2 := lt_of_divides hk hpg hkgt
+          cases hi k bla hkgt with
+          | intro s' hs' =>
+            exists p :: s'
+            constructor
+            . exact finset_extensionality IsPrime p hp.left s' hs'.left
+            . rw [hk, hs'.right]; exact mul_head_of_prod_cons
+
+
+theorem prod_append_mul {ns ms: List Nat}: prod ns * prod ms = prod (ns ++ ms) := by
+  induction ns with
+  | nil => simp
+  | cons x xs ih =>
+    rw [mul_head_of_prod_cons, List.cons_append, mul_head_of_prod_cons, Nat.mul_assoc, ←ih]
+
+
+theorem prime_decomposition_of_mul {n m: Nat} {ns ms: List Nat} (hn: PrimeDecomposition n ns) (hm: PrimeDecomposition m ms): PrimeDecomposition (n*m) (ns ++ ms) := by
+  constructor
+  . intros x hmem
+    rw [List.mem_append] at hmem
+    cases hmem with
+    | inl hleft => exact hn.left x hleft
+    | inr hright => exact hm.left x hright
+  . rw [hn.right, hm.right, prod_append_mul]
+
+
+theorem dvd_or_dvd {p n m: Nat} (h: IsPrime p) (hdvd: p ∣ n * m): p ∣ n ∨ p ∣ m := by
+  induction p using Nat.strongRecOn with
+  | ind p hi => sorry
+
+
+  -- have h₀: 0 < n*m := sorry
+  -- have hn₀: 0 < n := Nat.pos_of_mul_pos_right h₀
+  -- have hm₀: 0 < m := Nat.pos_of_mul_pos_left h₀
+  -- have hp₀: 0 < p := Nat.lt_of_succ_lt (Nat.lt_of_succ_le h.left)
+
+  -- apply Classical.byContradiction
+  -- intro hnot
+  -- rw [de_morgan_not_or] at hnot
+  -- have ⟨hnn, hnm⟩ := hnot
+
+  -- cases hdvd with
+  -- | intro k hk =>
+  --   have h₀': 0 < p * k := by rw [hk] at h₀; assumption
+  --   have hk₀: 0 < k := Nat.pos_of_mul_pos_left h₀'
+
+  --   sorry
+
+
+theorem prime_decomposition_of_prime (p: Nat) {hp: IsPrime p}: PrimeDecomposition p [p] := by
+  constructor
+  . intros x hx
+    rw [List.mem_singleton] at hx
+    rw [hx]
+    assumption
+  . rw [self_of_prod_singleton]
+
+
+structure FinMultiSet (α: Type) where
+  elements: List α
+
+instance : Membership α (FinMultiSet α) where
+  mem l a := List.Mem a l.elements
+
+
+-- instance : BEq (FinMultiSet α) where
+--  beq a b := List.beq (List.mergeSort a) (List.mergeSort b)
+
+
+def IsSorted : List Nat -> Bool
+  | [] => true
+  | [_] => true
+  | a :: b :: xs' => a ≤ b ∧ IsSorted (b::xs')
+
+theorem is_sorted_tail {x: Nat} {xs: List Nat} (h: IsSorted (x :: xs)): IsSorted xs :=
+  match xs with
+  | [] => rfl
+  | [_] => rfl
+  | a :: b :: xs' => by
+    unfold IsSorted at h
+    simp at h
+    exact h.right
+
+
+theorem mem_of_tail_mem_of_list (x: α) (s: List α) (h: x ∈ s.tail): x ∈ s := by
+  match s with
+  | [] => rw [List.tail_nil] at h; assumption
+  | y::ys => rw [List.tail_cons] at h; rw [List.mem_cons]; right; assumption
+
+theorem forall_tail {s: List α} {p: α → Prop} (h: ∀x, x ∈ s → p x): ∀x, x ∈ s.tail → p x := by
+  intros x helem
+  exact h x (mem_of_tail_mem_of_list x s helem)
+
+
+theorem reducible_pd {s: List Nat} (hs: PrimeDecomposition (prod s) s): PrimeDecomposition (prod s.tail) s.tail := by
+  cases s with
+    | nil => rw [List.tail_nil]; assumption
+    | cons a as =>
+      rw [List.tail];
+      constructor
+      . intros x hx
+        exact hs.left x (List.mem_cons_of_mem a hx)
+      . rfl
+
+
+theorem prod_gt_zero (s: List Nat) (h: ∀x, x ∈ s → x > 0): 0 < prod s := by
+  induction s with
+  | nil => rw [one_of_prod_nil]; exact Nat.zero_lt_one
+  | cons a as ih =>
+    rw [mul_head_of_prod_cons]
+    exact Nat.mul_pos (h a (List.mem_cons_self a as)) (ih (List.forall_mem_cons.mp h).right)
+
+theorem prime_prod_eq_len (a: Nat) (as: List Nat) (n: Nat) (hn₁: n = prod []) (hn₂: n = prod (a::as)) (hs₂ : (∀ (x : Nat), x ∈ a :: as → IsPrime x)) (hgt₂: ∀x, x ∈ (a::as) → x > 0): False := by
+  rw [one_of_prod_nil] at hn₁
+  rw [hn₁, mul_head_of_prod_cons] at hn₂
+  have ha: 1 < a := (hs₂ a (List.mem_cons_self a as)).left
+  have has: 0 < prod as := prod_gt_zero as (forall_tail hgt₂)
+  have tmp: 1 < a * prod as := by calc
+    1 < a           := ha
+    _ = a * 1       := by rw [Nat.mul_one]
+    _ ≤ a * prod as := Nat.mul_le_mul_left a has
+  rw [←hn₂] at tmp
+  exact Nat.lt_irrefl 1 tmp
+
+theorem sorted_head_le_tail (a: Nat) (as: List Nat) (h: IsSorted (a::as)): ∀x, x ∈ as → a ≤ x := by
+  intro y hy
+  induction as with
+  | nil => exfalso; exact List.not_mem_nil y hy
+  | cons b bs ih =>
+    unfold IsSorted at h; simp at h;
+    have h': IsSorted (a::bs) := by
+      have hbs: IsSorted bs := is_sorted_tail h.right
+      exact match bs with
+      | [] => rfl
+      | c::cs => by unfold IsSorted at h; simp at h; have hac: a ≤ c := Nat.le_trans h.left h.right.left; simp [IsSorted]; exact ⟨hac, h.right.right⟩
+    cases List.mem_cons.mp hy with
+    | inl hb => rw [hb]; exact h.left
+    | inr hbs => exact ih h' hbs
+
+theorem eq_of_dvd {p q: Nat} (hp: IsPrime p) (hq: IsPrime q) (hpq: p ∣ q): p = q := by
+  apply Classical.byContradiction
+  intro hnpq
+  exact hq.right p ⟨hp.left, hnpq⟩ hpq
+
+theorem dvd_prod_dvd_mem {p: Nat} {qs: List Nat} (hp: IsPrime p) (hqs: ∀q, q ∈ qs → IsPrime q) (hdvd: p ∣ prod qs): p ∈ qs := by
+  induction qs with
+  | nil =>
+    exfalso
+    rw [one_of_prod_nil, Nat.dvd_one] at hdvd
+    have h:=hp.left
+    omega
+  | cons x xs ih =>
+    rw [mul_head_of_prod_cons] at hdvd
+    cases dvd_or_dvd hp hdvd with
+    | inl hpx =>
+      have hprime_x := hqs x (List.mem_cons_self x xs)
+      cases Classical.em (p = x) with
+      | inl hpeqx => rw [hpeqx]; apply List.mem_cons_self
+      | inr hpneqx => exfalso; exact hprime_x.right p ⟨hp.left, hpneqx⟩ hpx
+    | inr hpps => exact List.mem_cons_of_mem x (ih (forall_tail hqs) hpps)
+
+
+theorem unique_pd {n : Nat} (s₁ s₂: List Nat) (hs₁: PrimeDecomposition n s₁) (hs₂: PrimeDecomposition n s₂) (h₁: IsSorted s₁) (h₂: IsSorted s₂): s₁ = s₂ := by
+  have hn₁ := hs₁.right
+  have hn₂ := hs₂.right
+
+  have hgt₁: ∀x, x ∈ s₁ → x > 0 := by
+    unfold PrimeDecomposition at hs₁
+    intros x helem
+    exact gt_zero_of_prime (hs₁.left x helem)
+
+  have hgt₂: ∀x, x ∈ s₂ → x > 0 := by
+    unfold PrimeDecomposition at hs₂
+    intros x helem
+    exact gt_zero_of_prime (hs₂.left x helem)
+
+  rw [hn₁] at hs₁
+  rw [hn₂] at hs₂
+
+  exact match s₁, s₂ with
+  | [], [] => by rfl
+  | [], (b::bs) => by exfalso; exact prime_prod_eq_len b bs n hn₁ hn₂ hs₂.left hgt₂
+  | (a::as), [] => by exfalso; exact prime_prod_eq_len a as n hn₂ hn₁ hs₁.left hgt₁
+  | (a::as), (b::bs) => by
+    have ha: IsPrime a := hs₁.left a (List.mem_cons.mpr (Or.inl (Eq.refl a)))
+    have hb: IsPrime b := hs₂.left b (List.mem_cons.mpr (Or.inl (Eq.refl b)))
+    rw [List.cons_eq_cons]
+    have haeqb: a=b := by
+      have hdvda: a ∣ prod (b::bs) := by
+        have tmp := mul_head_of_prod_dvd (List.mem_cons_self a as)
+        rw [←hn₁, hn₂] at tmp
+        assumption
+      have hdvdb: b ∣ prod (a::as) := by
+        have tmp := mul_head_of_prod_dvd (List.mem_cons_self b bs)
+        rw [←hn₂, hn₁] at tmp
+        assumption
+      have hab: a ∣ b ∨ a ∣ prod bs := by
+        apply dvd_or_dvd ha
+        assumption
+      cases hab with
+      | inl simple => exact eq_of_dvd ha hb simple
+      | inr hard =>
+        have hamem: a ∈ bs := dvd_prod_dvd_mem ha (forall_tail hs₂.left) hard
+        have hle := sorted_head_le_tail b bs h₂ a hamem
+        cases Nat.eq_or_lt_of_le hle with
+        | inl heq => rw [heq]
+        | inr hlt =>
+          have hxxxx: b ∣ prod (as) := by
+            rw [mul_head_of_prod_cons] at hdvdb;
+            cases dvd_or_dvd hb hdvdb with
+            | inl heq' => exfalso; exact ha.right b ⟨hb.left, Nat.ne_of_lt hlt⟩ heq'
+            | inr hlt' => assumption
+          have hbmem: b ∈ as := dvd_prod_dvd_mem hb (forall_tail hs₁.left) hxxxx
+          have hble := sorted_head_le_tail a as h₁ b hbmem
+          exfalso
+          omega
+
+    have hprod_as_eq_prod_bs: prod as = prod bs := by
+      rw [←haeqb, hn₁] at hn₂
+      apply Nat.eq_of_mul_eq_mul_left
+      exact hgt₁ a (List.mem_cons_self a as)
+      assumption
+
+    have haseqbs := unique_pd as bs (reducible_pd hs₁) ⟨forall_tail hs₂.left, hprod_as_eq_prod_bs⟩ (is_sorted_tail h₁) (is_sorted_tail h₂)
+
+    exact ⟨haeqb, haseqbs⟩
