@@ -650,3 +650,129 @@ theorem unique_pd {n : Nat} (s₁ s₂: List Nat) (hs₁: PrimeDecomposition n s
     have haseqbs := unique_pd as bs (reducible_pd hs₁) ⟨forall_tail hs₂.left, hprod_as_eq_prod_bs⟩ (is_sorted_tail h₁) (is_sorted_tail h₂)
 
     exact ⟨haeqb, haseqbs⟩
+
+def factorial (n: Nat) := Nat.fold (fun n => ((n+1) * .)) n 1
+
+theorem factorial_0_is_1: factorial 0 = 1 :=
+  rfl
+
+theorem factorial_1_is_1: factorial 1 = 1 :=
+  rfl
+
+theorem factorial_2_is_2: factorial 2 = 2 :=
+  rfl
+
+theorem factorial_3_is_6: factorial 3 = 6 :=
+  rfl
+
+theorem factorial_mul {n: Nat}: factorial (n + 1) = (n + 1) * factorial n := by
+  simp only [factorial, Nat.fold]
+
+theorem zero_lt_factorial {n: Nat}: 0 < factorial n := by
+  induction n with
+  | zero => rw [factorial_0_is_1]; apply Nat.lt_add_one
+  | succ n ih => rw [factorial_mul]; exact Nat.mul_pos (Nat.zero_lt_succ n) ih
+
+theorem dvd_factorial_of_le {n m: Nat} (h: m ≤ n) (hm: 0 < m): m ∣ factorial n := by
+  induction n with
+  | zero => omega
+  | succ n hi =>
+    rw [factorial_mul]
+    cases Nat.lt_or_eq_of_le h with
+    | inl hlt =>
+      cases hi (Nat.le_of_lt_succ hlt) with
+      | intro l hl =>
+        exists l * (n + 1)
+        rw [←Nat.mul_assoc, Nat.mul_comm, hl]
+    | inr heq =>
+      rw [heq]
+      exists factorial n
+
+def minFacAux (n k: Nat) (h: 1 < k):=
+  if k ∣ n then k
+  else if n < k*k then n
+  else minFacAux n (k + 2) (by omega)
+termination_by n - k
+decreasing_by
+  have : k < k * k := by
+    conv => lhs; rw [←Nat.mul_one k]
+    rwa [Nat.mul_lt_mul_left (by omega)]
+  omega
+
+def minFac (n: Nat) :=
+  if 2 ∣ n then 2
+  else minFacAux n 3 (by omega)
+
+theorem minFac_0_is_2: minFac 0 = 2 := by
+  rfl
+
+theorem minFac_1_is_1: minFac 1 = 1 := by
+  simp [minFac, minFacAux]
+
+theorem minFac_2_is_2: minFac 2 = 2 := by
+  simp [minFac, minFacAux]
+  intro h
+  exfalso
+  apply h
+  apply Nat.dvd_refl
+
+theorem minFac_3_is_3: minFac 3 = 3 := by
+  simp [minFac, minFacAux]
+  omega
+
+theorem minFac_35_is_5: minFac 35 = 5 := by
+  simp [minFac, minFacAux]
+  repeat first | split | omega
+
+
+theorem min_fac_aux_pos {n k: Nat} (h: 1 < k): 0 < minFacAux n k h := by
+  unfold minFacAux
+  split
+  . omega
+  . split
+    case isFalse.isTrue hndiv _ =>
+      by_cases h₀: n = 0
+      . exfalso; apply hndiv; rw [h₀]; apply Nat.dvd_zero
+      . omega
+    . apply min_fac_aux_pos
+termination_by n - k
+decreasing_by
+  -- This seems somewhat crude ...
+  have : k < k * k := by
+    conv => lhs; rw [←Nat.mul_one k]
+    rwa [Nat.mul_lt_mul_left (by omega)]
+  omega
+
+
+theorem min_fac_pos {n: Nat}: 0 < minFac n := by
+  unfold minFac
+  split
+  . apply Nat.succ_pos
+  . apply min_fac_aux_pos
+
+theorem min_fac_is_prime {n: Nat} (h: 1 < n): Prime (minFac n) := by
+  constructor
+  . sorry
+  . intro m hm hmd
+    have hm': m ≤ minFac n := Nat.le_of_dvd (min_fac_pos) hmd
+    have hm': m < minFac n := Nat.lt_of_le_of_ne hm' hm.right
+    sorry
+
+
+theorem exists_infinite_primes: (∀n, ∃p, n ≤ p ∧ Prime p) := by
+  intro n
+  let p := minFac (factorial n + 1)
+  exists p
+  constructor
+  . sorry
+  . apply min_fac_is_prime
+    exact Nat.succ_lt_succ_iff.mpr (zero_lt_factorial n)
+    -- constructor
+    -- . sorry
+    -- . intro m
+    --   intro hm
+    --   intro hmp
+    --   have hm_le_fac_n1: m ≤ factorial n :=
+    --     Nat.le_of_lt_succ (Nat.lt_of_le_of_ne (Nat.le_of_dvd (sorry) hmp) hm.right)
+
+    --   sorry
